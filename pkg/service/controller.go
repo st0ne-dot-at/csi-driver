@@ -2,6 +2,7 @@ package service
 
 import (
 	"fmt"
+	"errors"
 	"strconv"
 
 	"github.com/container-storage-interface/spec/lib/go/csi"
@@ -137,6 +138,19 @@ func (c *ControllerService) ControllerPublishVolume(
 	if err != nil {
 		klog.Errorf("Failed to get ovirt client connection")
 		return nil, err
+	}
+
+	_, err = diskAttachmentByVmAndDisk(conn, req.NodeId, req.VolumeId)
+	if err != nil {
+		// If attachment was not found we are good to
+		attachmentNotFoundErr := &AttachmentNotFoundError{}
+		if !errors.As(err, &attachmentNotFoundErr) {
+			klog.Error("Failed to list attachments", err)
+			return nil, err
+		}
+	} else {
+		klog.Infof("Disk %s is already attached to VM %s, returning OK", req.VolumeId, req.NodeId)
+		return &csi.ControllerPublishVolumeResponse{}, nil
 	}
 
 	vmService := conn.SystemService().VmsService().VmService(req.NodeId)
